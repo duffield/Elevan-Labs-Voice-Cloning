@@ -42,11 +42,13 @@ def main():
     print("✅ API key loaded successfully\n")
     
     # Configuration
-    audio_file = "recorded_voice.wav"
+    audio_dir = "Audio-Recordings"
+    audio_filename = "recorded_voice.wav"
+    audio_file = os.path.join(audio_dir, audio_filename)
     voice_name = "My_Cloned_Voice"
     
     # Initialize components
-    recorder = AudioRecorder(duration=30)
+    recorder = AudioRecorder(duration=30, output_dir=audio_dir)
     cloner = VoiceCloner(api_key)
     agent_manager = ConversationalAgent(api_key)
     
@@ -54,9 +56,22 @@ def main():
     agent_id = None
     
     try:
-        # Step 1: Record audio
-        print("STEP 1/3: Recording your voice")
-        audio_file = recorder.record(audio_file)
+        # Step 1: Record audio or use existing
+        print("STEP 1/3: Audio preparation")
+        
+        # Check if audio file already exists
+        if os.path.exists(audio_file):
+            print(f"\n📁 Found existing audio file: {audio_file}")
+            use_existing = input("Use existing (e) or record new (n)? ").strip().lower()
+            
+            if use_existing == 'e':
+                print(f"✅ Using existing audio file: {audio_file}\n")
+            else:
+                print("🎤 Recording new audio...")
+                audio_file = recorder.record(audio_filename)
+        else:
+            print("🎤 No existing audio found. Recording new audio...")
+            audio_file = recorder.record(audio_filename)
         
         # Step 2: Clone voice with timing
         print("STEP 2/3: Cloning your voice")

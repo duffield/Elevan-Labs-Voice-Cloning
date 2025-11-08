@@ -41,22 +41,64 @@ class ConversationalAgent:
             }
         
         try:
-            # Create agent with the cloned voice
-            agent = self.client.conversational_ai.create_agent(
-                name=agent_config["name"],
-                voice_id=voice_id,
-                first_message=agent_config["first_message"],
-                prompt={
-                    "prompt": agent_config["system_prompt"]
-                },
-                language=agent_config["language"]
-            )
+            # Try to create agent - check if there's an existing one first
+            try:
+                agents_list = self.client.conversational_ai.agents.list()
+                if hasattr(agents_list, 'agents') and len(agents_list.agents) > 0:
+                    # Use the first existing agent and update it
+                    existing_agent = agents_list.agents[0]
+                    print(f"\nℹ️  Found existing agent: {existing_agent.name} (ID: {existing_agent.agent_id})")
+                    print(f"   Updating it with your cloned voice...")
+                    
+                    # Update the agent with new voice
+                    conversation_config = {
+                        "agent": {
+                            "prompt": agent_config["system_prompt"],
+                            "first_message": agent_config["first_message"],
+                            "language": agent_config["language"]
+                        },
+                        "tts": {
+                            "voice_id": voice_id
+                        }
+                    }
+                    
+                    self.client.conversational_ai.agents.update(
+                        agent_id=existing_agent.agent_id,
+                        name=agent_config["name"],
+                        conversation_config=conversation_config
+                    )
+                    
+                    agent_id = existing_agent.agent_id
+                else:
+                    raise Exception("No existing agents found")
+            except Exception as list_err:
+                print(f"   Could not use existing agent: {str(list_err)}")
+                print(f"   Attempting to create new agent...")
+                
+                # Create conversational config with agent settings using dict
+                conversation_config = {
+                    "agent": {
+                        "prompt": agent_config["system_prompt"],
+                        "first_message": agent_config["first_message"],
+                        "language": agent_config["language"]
+                    },
+                    "tts": {
+                        "voice_id": voice_id
+                    }
+                }
+                
+                # Create agent with the cloned voice
+                agent = self.client.conversational_ai.agents.create(
+                    name=agent_config["name"],
+                    conversation_config=conversation_config
+                )
+                agent_id = agent.agent_id
             
-            print(f"✅ Agent created successfully!")
-            print(f"🆔 Agent ID: {agent.agent_id}")
+            print(f"✅ Agent ready!")
+            print(f"🆔 Agent ID: {agent_id}")
             print("="*50 + "\n")
             
-            return agent.agent_id
+            return agent_id
             
         except Exception as e:
             print(f"\n❌ Failed to create agent: {str(e)}")
@@ -120,7 +162,7 @@ class ConversationalAgent:
             agent_id: ID of the agent to delete
         """
         try:
-            self.client.conversational_ai.delete_agent(agent_id)
+            self.client.conversational_ai.agents.delete(agent_id)
             print(f"🗑️  Agent {agent_id} deleted successfully")
         except Exception as e:
             print(f"⚠️  Failed to delete agent {agent_id}: {str(e)}")

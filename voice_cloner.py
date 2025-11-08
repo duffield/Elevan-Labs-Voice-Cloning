@@ -15,13 +15,14 @@ class VoiceCloner:
         """
         self.client = ElevenLabs(api_key=api_key)
         
-    def clone_voice(self, audio_file_path, voice_name=None):
+    def clone_voice(self, audio_file_path, voice_name=None, delete_previous=True):
         """
         Clone a voice from an audio file using ElevenLabs Instant Voice Cloning.
         
         Args:
             audio_file_path: Path to the audio file containing the voice sample
             voice_name: Optional name for the cloned voice (defaults to timestamp)
+            delete_previous: If True, deletes any existing voice with the same name before cloning
             
         Returns:
             tuple: (voice_id, cloning_duration_seconds)
@@ -34,15 +35,27 @@ class VoiceCloner:
         print("="*50)
         print(f"\nVoice name: {voice_name}")
         print(f"Audio file: {audio_file_path}")
+        
+        # Delete previous voice with same name if it exists
+        if delete_previous:
+            try:
+                voices = self.client.voices.get_all()
+                for voice in voices.voices:
+                    if voice.name == voice_name:
+                        print(f"\n🗑️  Deleting previous voice '{voice_name}' (ID: {voice.voice_id})...")
+                        self.delete_voice(voice.voice_id)
+                        break
+            except Exception as e:
+                print(f"⚠️  Could not check for previous voice: {str(e)}")
+        
         print("\n⏳ Starting voice cloning process...")
         
         start_time = time.time()
         
         try:
-            # Open and read the audio file
+            # Use the IVC (Instant Voice Cloning) endpoint
             with open(audio_file_path, 'rb') as audio_file:
-                # Use the add voice endpoint for instant voice cloning
-                voice = self.client.voices.add(
+                voice = self.client.voices.ivc.create(
                     name=voice_name,
                     files=[audio_file]
                 )

@@ -136,8 +136,7 @@ class DualAudioInterface(DefaultAudioInterface):
     
     def interrupt(self):
         """Immediately interrupt audio playback and clear output queue."""
-        # Only clear the output queue, don't stop the stream
-        # The stream needs to stay open for the conversation to continue
+        # First, aggressively clear the output queue to minimize latency
         if hasattr(self, 'output_queue'):
             try:
                 import queue
@@ -150,9 +149,28 @@ class DualAudioInterface(DefaultAudioInterface):
             except Exception:
                 pass
         
-        # DON'T stop the output stream - just clear the queue
-        # Stopping the stream causes "Stream closed" errors during active conversation
-        # The stream will be properly closed when the conversation ends
+        # Stop and restart output stream to interrupt playback immediately
+        # but keep stream alive for conversation
+        if hasattr(self, 'out_stream') and self.out_stream:
+            try:
+                if self.out_stream.is_active():
+                    self.out_stream.stop_stream()
+                    # Immediately restart it
+                    self.out_stream.start_stream()
+            except Exception:
+                # If restart fails, try to recreate the stream
+                try:
+                    self.out_stream.close()
+                    self.out_stream = self.p.open(
+                        format=self.pyaudio.paInt16,
+                        channels=1,
+                        rate=16000,
+                        output=True,
+                        frames_per_buffer=self.OUTPUT_FRAMES_PER_BUFFER,
+                        start=True,
+                    )
+                except Exception:
+                    pass
     
     def _save_recording(self):
         """Save captured audio to file."""

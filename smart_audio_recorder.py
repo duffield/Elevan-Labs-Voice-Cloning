@@ -52,7 +52,7 @@ class SmartAudioRecorder:
         rms = self._get_audio_level(data)
         return rms > self.silence_threshold
     
-    def _display_progress(self, speech_seconds, total_seconds, is_recording, force_update=False):
+    def _display_progress(self, speech_seconds, is_recording, force_update=False):
         """Display recording progress with voice activity indicator."""
         bar_length = 30
         progress = min(1.0, speech_seconds / self.target_duration)
@@ -70,16 +70,15 @@ class SmartAudioRecorder:
             self._last_status = status
         
         # Always update the progress bar on same line
-        sys.stdout.write(f"\r│{bar}│ {total_seconds:.0f}s total")
+        sys.stdout.write(f"\r│{bar}│")
         sys.stdout.flush()
     
-    def record(self, output_file="smart_recorded_voice.wav", max_total_time=120, stop_flag=None):
+    def record(self, output_file="smart_recorded_voice.wav", stop_flag=None):
         """
         Record audio, only capturing when speech is detected.
         
         Args:
             output_file: Filename to save (will be saved in output_dir)
-            max_total_time: Maximum total recording time in seconds (default: 120)
             
         Returns:
             str: Path to the saved audio file
@@ -90,7 +89,6 @@ class SmartAudioRecorder:
         print("🎤 SMART VOICE RECORDING (Voice Activity Detection)")
         print("="*70)
         print(f"\nTarget speech duration: {self.target_duration} seconds")
-        print(f"Maximum total time: {max_total_time} seconds")
         print("\n💡 The recorder will only capture when you're speaking.")
         print("   When you're silent, recording pauses automatically.")
         print("\nStarting in 3...")
@@ -118,9 +116,7 @@ class SmartAudioRecorder:
         
         frames = []
         speech_frames = 0
-        total_frames = 0
         target_frames = int(self.sample_rate / self.chunk * self.target_duration)
-        max_frames = int(self.sample_rate / self.chunk * max_total_time)
         
         speech_buffer = []
         speech_buffer_duration = int(self.sample_rate / self.chunk * self.min_speech_chunk)
@@ -135,14 +131,13 @@ class SmartAudioRecorder:
         self.actual_speech_seconds = 0
         
         try:
-            while speech_frames < target_frames and total_frames < max_frames:
+            while speech_frames < target_frames:
                 # Check if stop was requested
                 if stop_flag and stop_flag.is_set():
                     print("\n\n⚠️  Recording stopped by external signal")
                     break
                 
                 data = stream.read(self.chunk, exception_on_overflow=False)
-                total_frames += 1
                 
                 # Check if this chunk contains speech
                 is_speech = self._is_speech(data)
@@ -167,8 +162,7 @@ class SmartAudioRecorder:
                         # Update display and external counter
                         speech_seconds = (speech_frames * self.chunk) / self.sample_rate
                         self.actual_speech_seconds = speech_seconds
-                        total_seconds = (total_frames * self.chunk) / self.sample_rate
-                        self._display_progress(speech_seconds, total_seconds, True)
+                        self._display_progress(speech_seconds, True)
                 else:
                     # Silence detected
                     if currently_recording:
@@ -183,13 +177,11 @@ class SmartAudioRecorder:
                             
                             # Update display (not recording anymore)
                             speech_seconds = (speech_frames * self.chunk) / self.sample_rate
-                            total_seconds = (total_frames * self.chunk) / self.sample_rate
-                            self._display_progress(speech_seconds, total_seconds, False)
+                            self._display_progress(speech_seconds, False)
                         else:
                             # Still within debounce window - keep displaying as recording
                             speech_seconds = (speech_frames * self.chunk) / self.sample_rate
-                            total_seconds = (total_frames * self.chunk) / self.sample_rate
-                            self._display_progress(speech_seconds, total_seconds, True)
+                            self._display_progress(speech_seconds, True)
                     else:
                         # Not recording, just reset buffers
                         silence_buffer = []
@@ -197,8 +189,7 @@ class SmartAudioRecorder:
                         
                         # Update display (waiting)
                         speech_seconds = (speech_frames * self.chunk) / self.sample_rate
-                        total_seconds = (total_frames * self.chunk) / self.sample_rate
-                        self._display_progress(speech_seconds, total_seconds, False)
+                        self._display_progress(speech_seconds, False)
             
             # Add any remaining buffer
             if speech_buffer:
@@ -212,16 +203,12 @@ class SmartAudioRecorder:
         sys.stdout.write("\r" + " " * 100 + "\r")
         
         final_speech_seconds = (speech_frames * self.chunk) / self.sample_rate
-        final_total_seconds = (total_frames * self.chunk) / self.sample_rate
         
         # Store actual speech duration for external access
         self.actual_speech_seconds = final_speech_seconds
         
         print(f"\n✅ Recording complete!")
         print(f"   Speech captured: {final_speech_seconds:.1f} seconds")
-        print(f"   Total time: {final_total_seconds:.1f} seconds")
-        if final_total_seconds > 0:
-            print(f"   Efficiency: {(final_speech_seconds/final_total_seconds*100):.1f}%")
         
         # Stop and close stream
         stream.stop_stream()

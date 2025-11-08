@@ -29,7 +29,7 @@ class CallRecorder:
         def record():
             try:
                 print(f"\n🔴 Smart recording started (target: {self.target_duration}s of speech)")
-                self.audio_file = self.recorder.record(filename, max_total_time=120)
+                self.audio_file = self.recorder.record(filename)
             except Exception as e:
                 print(f"\n⚠️  Recording error: {str(e)}")
                 self.audio_file = None

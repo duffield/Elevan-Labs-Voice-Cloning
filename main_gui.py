@@ -277,9 +277,14 @@ class VoiceCloneApp:
         # Create unified audio interface that handles both conversation and recording
         self.audio_interface = DualAudioInterface(
             record_to_file=self.audio_filename,
-            output_dir="Audio-Recordings"
+            output_dir="Audio-Recordings",
+            gui=self.gui
         )
         self.audio_interface.start_recording(self.audio_filename)
+        
+        # Update GUI status
+        if self.gui:
+            self.gui.update_status("Starting call...", "blue")
         
         # Set conversation active flag
         self.conversation_active.set()
@@ -367,21 +372,33 @@ class VoiceCloneApp:
             
             # Delete old voice to free up quota (never delete Voice_01_Clone)
             if self.old_voice_id:
+                print(f"🔧 DEBUG: old_voice_id = {self.old_voice_id}")
                 try:
                     voices = self.cloner.list_voices()
+                    print(f"🔧 DEBUG: Found {len(voices)} total voices")
+                    
                     old_voice_name = next(
                         (v.name for v in voices if v.voice_id == self.old_voice_id),
                         None
                     )
                     
-                    if old_voice_name == "Voice_01_Clone":
+                    print(f"🔧 DEBUG: old_voice_name = {old_voice_name}")
+                    
+                    if not old_voice_name:
+                        print(f"⚠️  Old voice ID {self.old_voice_id} not found in voice list\n")
+                    elif old_voice_name == "Voice_01_Clone":
                         print(f"ℹ️  Keeping Voice_01_Clone (protected voice)\n")
                     else:
                         print(f"🗑️  Deleting old voice: {self.old_voice_id} ({old_voice_name})...")
                         self.cloner.delete_voice(self.old_voice_id)
                         print(f"✅ Old voice deleted to free up quota\n")
                 except Exception as e:
-                    print(f"⚠️  Could not delete old voice: {str(e)}\n")
+                    print(f"⚠️  Could not delete old voice: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    print()
+            else:
+                print("🔧 DEBUG: No old_voice_id set, skipping deletion\n")
             
             # Update for next call
             self.old_voice_id = voice_id

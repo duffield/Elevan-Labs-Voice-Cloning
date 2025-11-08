@@ -1,5 +1,6 @@
 from elevenlabs.client import ElevenLabs
 from elevenlabs.conversational_ai.conversation import Conversation
+from elevenlabs.conversational_ai.default_audio_interface import DefaultAudioInterface
 
 
 class ConversationalAgent:
@@ -121,10 +122,14 @@ class ConversationalAgent:
         print("="*50 + "\n")
         
         try:
-            # Start the conversation (audio interface is created automatically)
+            # Create audio interface for microphone and speakers
+            audio_interface = DefaultAudioInterface()
+            
+            # Start the conversation
             self.conversation = Conversation(
                 agent_id=agent_id,
                 client=self.client,
+                audio_interface=audio_interface,
                 requires_auth=True
             )
             

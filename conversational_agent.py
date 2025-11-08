@@ -158,10 +158,14 @@ class ConversationalAgent:
         """Stop the active conversation."""
         if self.conversation:
             try:
+                print("\n📞 Ending conversation session...")
                 self.conversation.end_session()
+                self.conversation = None
                 print("🛑 Conversation stopped")
             except Exception as e:
                 print(f"⚠️  Error stopping conversation: {str(e)}")
+                # Force clear the conversation object
+                self.conversation = None
     
     def find_agent_by_name(self, agent_name):
         """

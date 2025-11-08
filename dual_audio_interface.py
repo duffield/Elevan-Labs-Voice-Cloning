@@ -219,12 +219,18 @@ class DualAudioInterface(DefaultAudioInterface):
         status = "🔴 RECORDING" if is_speaking else "⏸️  WAITING"
         percentage = int(progress * 100)
         
-        status_line = f"{status} - {speech_seconds:.1f}/{self.target_duration}s speech ({percentage}%)"
+        # Round speech_seconds to 0.5s increments for display (reduces updates)
+        speech_rounded = round(speech_seconds * 2) / 2  # Rounds to nearest 0.5
+        status_line = f"{status} - {speech_rounded:.1f}/{self.target_duration}s speech ({percentage}%)"
         
-        # Update console with carriage return to overwrite same line
-        # Add spaces at end to clear any previous longer text
-        sys.stdout.write(f"\r{status_line} │{bar}│" + " " * 10)
-        sys.stdout.flush()
+        # Only update if status or rounded time changed (to prevent spamming terminal)
+        current_status = (status, speech_rounded)
+        if current_status != self._last_status:
+            # Update console with carriage return to overwrite same line
+            # Add spaces at end to clear any previous longer text
+            sys.stdout.write(f"\r{status_line} │{bar}│" + " " * 10)
+            sys.stdout.flush()
+            self._last_status = current_status
         
         # Update GUI if available
         if self.gui:

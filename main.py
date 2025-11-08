@@ -266,12 +266,6 @@ class VoiceCloneApp:
     
     def start_call(self):
         """Start the call (triggered by GUI button)."""
-        # Run the actual call in a separate thread to avoid blocking the GUI
-        call_thread = threading.Thread(target=self._run_call, daemon=False)
-        call_thread.start()
-    
-    def _run_call(self):
-        """Internal method that runs the call in a separate thread."""
         # Generate timestamp for background recording
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.audio_filename = f"call_recording_{timestamp}.wav"
@@ -522,9 +516,6 @@ def main():
             app.gui.destroy()
         raise
 
-
-if __name__ == "__main__":
-    main()
 
 if __name__ == "__main__":
     main()

@@ -121,20 +121,24 @@ class ConversationalAgent:
         print("="*50 + "\n")
         
         try:
-            # Start the conversation
+            # Start the conversation (audio interface is created automatically)
             self.conversation = Conversation(
                 agent_id=agent_id,
                 client=self.client,
-                # Audio input/output will be handled automatically
                 requires_auth=True
             )
             
             print("🟢 Conversation started!")
             print("Speak into your microphone to interact with the agent.")
-            print("The agent will respond using your cloned voice.\n")
+            print("The agent will respond using your cloned voice.")
+            print("💡 Press Ctrl+C to end the conversation.\n")
             
-            # Start the conversation session
-            self.conversation.start_session()
+            # Start the conversation session (blocking call)
+            try:
+                self.conversation.start_session()
+            except KeyboardInterrupt:
+                print("\n⚠️  Interrupting conversation...")
+                self.conversation.end_session()
             
             print("\n" + "="*50)
             print("👋 Conversation ended")
@@ -153,6 +157,70 @@ class ConversationalAgent:
                 print("🛑 Conversation stopped")
             except Exception as e:
                 print(f"⚠️  Error stopping conversation: {str(e)}")
+    
+    def find_agent_by_name(self, agent_name):
+        """
+        Find an agent by name.
+        
+        Args:
+            agent_name: Name of the agent to find
+            
+        Returns:
+            Agent object if found, None otherwise
+        """
+        try:
+            agents_list = self.client.conversational_ai.agents.list()
+            if hasattr(agents_list, 'agents'):
+                for agent in agents_list.agents:
+                    if agent.name == agent_name:
+                        return agent
+            return None
+        except Exception as e:
+            print(f"⚠️  Error finding agent: {str(e)}")
+            return None
+    
+    def update_agent_voice(self, agent_id, voice_id, agent_config=None):
+        """
+        Update an existing agent's voice.
+        
+        Args:
+            agent_id: The ID of the agent to update
+            voice_id: The new voice ID to use
+            agent_config: Optional configuration dict for the agent
+            
+        Returns:
+            str: Agent ID
+        """
+        print(f"\n🔄 Updating agent {agent_id} with voice ID: {voice_id}")
+        
+        try:
+            # Build conversation config
+            conversation_config = {
+                "tts": {
+                    "voice_id": voice_id
+                }
+            }
+            
+            # Add agent configuration if provided
+            if agent_config:
+                conversation_config["agent"] = {
+                    "prompt": agent_config.get("system_prompt", ""),
+                    "first_message": agent_config.get("first_message", ""),
+                    "language": agent_config.get("language", "en")
+                }
+            
+            # Update the agent
+            self.client.conversational_ai.agents.update(
+                agent_id=agent_id,
+                conversation_config=conversation_config
+            )
+            
+            print(f"✅ Agent voice updated successfully!")
+            return agent_id
+            
+        except Exception as e:
+            print(f"❌ Failed to update agent: {str(e)}")
+            raise
     
     def delete_agent(self, agent_id):
         """

@@ -75,6 +75,18 @@ class VoiceCloner:
             cloning_duration = end_time - start_time
             print(f"\n❌ Voice cloning failed after {cloning_duration:.2f} seconds")
             print(f"Error: {str(e)}")
+            print(f"Error type: {type(e).__name__}")
+            
+            # Detailed API error diagnostics
+            if hasattr(e, 'status_code'):
+                print(f"HTTP Status Code: {e.status_code}")
+            if hasattr(e, 'body'):
+                print(f"Response Body: {e.body}")
+            if hasattr(e, 'detail'):
+                print(f"Detail: {e.detail}")
+            if hasattr(e, '__dict__'):
+                print(f"Exception attributes: {e.__dict__}")
+            
             print("="*50 + "\n")
             raise
     

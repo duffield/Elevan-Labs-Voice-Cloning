@@ -60,7 +60,7 @@ class DualAudioInterface(DefaultAudioInterface):
         
         # Voice Activity Detection parameters
         self.target_duration = target_duration
-        self.silence_threshold = 500  # RMS threshold for silence
+        self.silence_threshold = 200  # RMS threshold for silence (lower = more sensitive)
         self.speech_seconds = 0
         self.currently_speaking = False
         self._last_status = None
@@ -107,7 +107,9 @@ class DualAudioInterface(DefaultAudioInterface):
             try:
                 audio = self.output_queue.get(timeout=0.25)
                 try:
-                    self.out_stream.write(audio)
+                    # Suppress PortAudio stderr warnings during playback
+                    with suppress_stderr():
+                        self.out_stream.write(audio)
                     error_count = 0  # Reset on success
                 except OSError as e:
                     error_count += 1
@@ -116,16 +118,17 @@ class DualAudioInterface(DefaultAudioInterface):
                         print("   Attempting to recover...")
                         try:
                             # Try to recreate the output stream
-                            self.out_stream.stop_stream()
-                            self.out_stream.close()
-                            self.out_stream = self.p.open(
-                                format=self.pyaudio.paInt16,
-                                channels=1,
-                                rate=16000,
-                                output=True,
-                                frames_per_buffer=self.OUTPUT_FRAMES_PER_BUFFER,
-                                start=True,
-                            )
+                            with suppress_stderr():
+                                self.out_stream.stop_stream()
+                                self.out_stream.close()
+                                self.out_stream = self.p.open(
+                                    format=self.pyaudio.paInt16,
+                                    channels=1,
+                                    rate=16000,
+                                    output=True,
+                                    frames_per_buffer=self.OUTPUT_FRAMES_PER_BUFFER,
+                                    start=True,
+                                )
                             error_count = 0
                             print("   ✅ Audio output recovered")
                         except Exception as recovery_error:

@@ -411,11 +411,22 @@ def main():
     
     # Loop to allow multiple calls with the new voice
     while True:
-        response = input("\nPress Enter to start a call with the new voice (or 'q' to quit): ").strip().lower()
+        try:
+            response = input("\nPress Enter to start a call with the new voice (or 'q' to quit): ").strip().lower()
+        except KeyboardInterrupt:
+            print("\n\n👋 Done! ShapeShifter is ready for the next call with your voice.")
+            # Ensure any active conversation is stopped
+            agent_manager.stop_conversation()
+            break
         
         if response == 'q':
             print("\n👋 Done! ShapeShifter is ready for the next call with your voice.")
+            # Ensure any active conversation is stopped
+            agent_manager.stop_conversation()
             break
+        
+        # Make sure any previous conversation is fully stopped before starting new one
+        agent_manager.stop_conversation(verbose=False)
         
         # Start new call
         print("\n🎙️  Starting call with your cloned voice...\n")

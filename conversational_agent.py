@@ -154,16 +154,23 @@ class ConversationalAgent:
             print("="*50 + "\n")
             raise
     
-    def stop_conversation(self):
-        """Stop the active conversation."""
+    def stop_conversation(self, verbose=True):
+        """Stop the active conversation.
+        
+        Args:
+            verbose: If True, print status messages. If False, stop silently.
+        """
         if self.conversation:
             try:
-                print("\n📞 Ending conversation session...")
+                if verbose:
+                    print("\n📞 Ending conversation session...")
                 self.conversation.end_session()
                 self.conversation = None
-                print("🛑 Conversation stopped")
+                if verbose:
+                    print("🛑 Conversation stopped")
             except Exception as e:
-                print(f"⚠️  Error stopping conversation: {str(e)}")
+                if verbose:
+                    print(f"⚠️  Error stopping conversation: {str(e)}")
                 # Force clear the conversation object
                 self.conversation = None
     

@@ -192,7 +192,7 @@ class ConversationalAgent:
             raise
     
     def stop_conversation(self, verbose=True):
-        """Stop the active conversation.
+        """Stop the active conversation with minimal latency.
         
         Args:
             verbose: If True, print status messages. If False, stop silently.
@@ -205,33 +205,49 @@ class ConversationalAgent:
             try:
                 if verbose:
                     print("\n📞 Ending conversation session...")
-                    print("🔧 DEBUG: Interrupting audio playback")
+                    print("🔧 DEBUG: Interrupting audio playback ASAP")
                 
-                # Immediately interrupt any playing audio via the conversation's audio interface
+                # Strategy: interrupt audio FIRST before anything else
+                # This gives the fastest perceived response
+                interrupts_attempted = []
+                
+                # Attempt 1: Interrupt via conversation's audio interface
                 try:
-                    if hasattr(self.conversation, 'audio_interface'):
+                    if hasattr(self.conversation, 'audio_interface') and self.conversation.audio_interface:
                         self.conversation.audio_interface.interrupt()
-                        if verbose:
-                            print("🔧 DEBUG: Audio interrupted via conversation")
-                except Exception as e:
-                    if verbose:
-                        print(f"⚠️  Could not interrupt via conversation: {str(e)}")
+                        interrupts_attempted.append("conversation.audio_interface")
+                except Exception:
+                    pass
                 
-                # Also try interrupting via stored audio interface reference
-                if hasattr(self, 'audio_interface') and self.audio_interface:
-                    try:
+                # Attempt 2: Interrupt via stored reference (in parallel)
+                try:
+                    if hasattr(self, 'audio_interface') and self.audio_interface:
                         self.audio_interface.interrupt()
-                        if verbose:
-                            print("🔧 DEBUG: Audio interrupted via stored reference")
-                    except Exception as e:
-                        if verbose:
-                            print(f"⚠️  Could not interrupt stored audio: {str(e)}")
+                        interrupts_attempted.append("self.audio_interface")
+                except Exception:
+                    pass
                 
+                if verbose and interrupts_attempted:
+                    print(f"🔧 DEBUG: Audio interrupted via: {', '.join(interrupts_attempted)}")
+                
+                # Now end the session (this may take longer)
                 if verbose:
                     print("🔧 DEBUG: Calling end_session()")
-                self.conversation.end_session()
-                if verbose:
-                    print("🔧 DEBUG: end_session() returned")
+                    
+                # Set a shorter timeout for ending session
+                import threading
+                end_thread = threading.Thread(target=self.conversation.end_session)
+                end_thread.daemon = True
+                end_thread.start()
+                end_thread.join(timeout=2.0)  # Wait max 2 seconds
+                
+                if end_thread.is_alive():
+                    if verbose:
+                        print("⚠️  end_session() still running after 2s, forcing cleanup")
+                else:
+                    if verbose:
+                        print("🔧 DEBUG: end_session() completed")
+                
                 self.conversation = None
                 if verbose:
                     print("🛑 Conversation stopped")

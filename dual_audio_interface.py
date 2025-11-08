@@ -10,7 +10,23 @@ import wave
 import os
 import sys
 import struct
+import time
+import contextlib
 from elevenlabs.conversational_ai.default_audio_interface import DefaultAudioInterface
+
+
+@contextlib.contextmanager
+def suppress_stderr():
+    """Temporarily suppress stderr to hide PortAudio warnings."""
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    old_stderr = os.dup(2)
+    try:
+        os.dup2(devnull, 2)
+        yield
+    finally:
+        os.dup2(old_stderr, 2)
+        os.close(devnull)
+        os.close(old_stderr)
 
 
 class DualAudioInterface(DefaultAudioInterface):
@@ -18,6 +34,10 @@ class DualAudioInterface(DefaultAudioInterface):
     Audio interface that extends ElevenLabs' default interface to also
     capture audio for background recording without opening multiple streams.
     """
+    
+    # Increase output buffer to prevent PortAudio underruns on macOS
+    INPUT_FRAMES_PER_BUFFER = 4000   # 250ms @ 16kHz (parent default)
+    OUTPUT_FRAMES_PER_BUFFER = 4000  # 250ms @ 16kHz (increased from 1000 to match input)
     
     def __init__(self, record_to_file=None, output_dir="Audio-Recordings", gui=None, target_duration=20):
         """
@@ -55,6 +75,7 @@ class DualAudioInterface(DefaultAudioInterface):
         if record_to_file and not os.path.exists(output_dir):
             os.makedirs(output_dir)
     
+    
     def start_recording(self, filename):
         """Start capturing audio to file."""
         with self.recording_lock:
@@ -76,25 +97,62 @@ class DualAudioInterface(DefaultAudioInterface):
         print("⚠️  No frames captured during recording")
         return None
     
+    
+    def _output_thread(self):
+        """Override output thread with better error handling for PortAudio issues."""
+        error_count = 0
+        max_consecutive_errors = 5
+        
+        while not self.should_stop.is_set():
+            try:
+                audio = self.output_queue.get(timeout=0.25)
+                try:
+                    self.out_stream.write(audio)
+                    error_count = 0  # Reset on success
+                except OSError as e:
+                    error_count += 1
+                    if error_count >= max_consecutive_errors:
+                        print(f"\n⚠️  Audio output error (attempt {error_count}): {e}")
+                        print("   Attempting to recover...")
+                        try:
+                            # Try to recreate the output stream
+                            self.out_stream.stop_stream()
+                            self.out_stream.close()
+                            self.out_stream = self.p.open(
+                                format=self.pyaudio.paInt16,
+                                channels=1,
+                                rate=16000,
+                                output=True,
+                                frames_per_buffer=self.OUTPUT_FRAMES_PER_BUFFER,
+                                start=True,
+                            )
+                            error_count = 0
+                            print("   ✅ Audio output recovered")
+                        except Exception as recovery_error:
+                            print(f"   ❌ Recovery failed: {recovery_error}")
+                            break
+            except queue.Empty:
+                pass
+    
     def interrupt(self):
         """Immediately interrupt audio playback and clear output queue."""
-        # Call parent's interrupt to clear the output queue
-        super().interrupt()
-        
-        # Also try to stop streams immediately if they exist
-        try:
-            if hasattr(self, 'out_stream') and self.out_stream:
-                # Clear any buffered audio
-                if hasattr(self, 'output_queue'):
-                    # Drain the queue
+        # Only clear the output queue, don't stop the stream
+        # The stream needs to stay open for the conversation to continue
+        if hasattr(self, 'output_queue'):
+            try:
+                import queue
+                # Clear queue without blocking
+                while not self.output_queue.empty():
                     try:
-                        import queue
-                        while True:
-                            self.output_queue.get_nowait()
-                    except:
-                        pass
-        except Exception:
-            pass
+                        self.output_queue.get_nowait()
+                    except queue.Empty:
+                        break
+            except Exception:
+                pass
+        
+        # DON'T stop the output stream - just clear the queue
+        # Stopping the stream causes "Stream closed" errors during active conversation
+        # The stream will be properly closed when the conversation ends
     
     def _save_recording(self):
         """Save captured audio to file."""
@@ -145,8 +203,9 @@ class DualAudioInterface(DefaultAudioInterface):
         
         status_line = f"{status} - {speech_seconds:.1f}/{self.target_duration}s speech ({percentage}%)"
         
-        # Update console
-        sys.stdout.write(f"\r{status_line} │{bar}│")
+        # Update console with carriage return to overwrite same line
+        # Add spaces at end to clear any previous longer text
+        sys.stdout.write(f"\r{status_line} │{bar}│" + " " * 10)
         sys.stdout.flush()
         
         # Update GUI if available
@@ -206,7 +265,9 @@ class DualAudioInterface(DefaultAudioInterface):
                         self._display_progress(self.speech_seconds, False)
         
         # Pass to parent's callback to handle conversation
-        return super()._in_callback(in_data, frame_count, time_info, status)
+        # Suppress stderr to prevent PortAudio warnings from breaking progress display
+        with suppress_stderr():
+            return super()._in_callback(in_data, frame_count, time_info, status)
     
     def get_recording_duration(self):
         """Get current recording duration in seconds."""

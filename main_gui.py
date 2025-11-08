@@ -328,15 +328,48 @@ class VoiceCloneApp:
         
         # Stop recording and save file
         if self.audio_interface:
+            # Get speech duration before stopping
+            speech_seconds = self.audio_interface.speech_seconds
+            target_duration = self.audio_interface.target_duration
+            
             audio_file = self.audio_interface.stop_recording()
         else:
             audio_file = None
+            speech_seconds = 0
+            target_duration = 20
         
         if not audio_file:
             print("❌ Recording failed or no audio captured")
             return
         
-        print(f"✅ Recording complete: {audio_file}\n")
+        # Check if we have enough speech (at least 50% of target)
+        min_required = target_duration * 0.5
+        percentage = (speech_seconds / target_duration) * 100
+        
+        print(f"✅ Recording saved: {audio_file}")
+        print(f"📊 Speech detected: {speech_seconds:.1f}s / {target_duration}s ({percentage:.0f}%)\n")
+        
+        if speech_seconds < min_required:
+            print(f"⚠️  INSUFFICIENT SPEECH DETECTED")
+            print(f"   Minimum required: {min_required:.1f}s (50% of {target_duration}s)")
+            print(f"   You only spoke for: {speech_seconds:.1f}s ({percentage:.0f}%)\n")
+            print("🗑️  Deleting audio file (not enough speech for cloning)...")
+            
+            # Delete the audio file
+            try:
+                import os
+                os.remove(audio_file)
+                print("✅ Audio file deleted\n")
+            except Exception as e:
+                print(f"⚠️  Could not delete audio file: {str(e)}\n")
+            
+            print("🚫 Voice cloning SKIPPED - agent voice unchanged")
+            print("💡 Speak for at least {:.0f} seconds on the next call to clone your voice.\n".format(min_required))
+            
+            # Update GUI
+            if self.gui:
+                self.gui.update_status("Not enough speech - voice unchanged", "orange")
+            return
         
         # Clone the recorded voice
         print("📍 Cloning your voice from the call\n")

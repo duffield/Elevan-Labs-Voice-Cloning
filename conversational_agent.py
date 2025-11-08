@@ -106,12 +106,13 @@ class ConversationalAgent:
             print("="*50 + "\n")
             raise
     
-    def start_conversation(self, agent_id):
+    def start_conversation(self, agent_id, audio_interface=None):
         """
         Start a conversation with the configured agent.
         
         Args:
             agent_id: The ID of the agent to converse with
+            audio_interface: Optional custom audio interface (uses default if None)
         """
         print("\n" + "="*50)
         print("💬 STARTING CONVERSATION")
@@ -123,7 +124,11 @@ class ConversationalAgent:
         
         try:
             # Create audio interface for microphone and speakers
-            audio_interface = DefaultAudioInterface()
+            if audio_interface is None:
+                audio_interface = DefaultAudioInterface()
+            
+            # Store reference for potential reuse
+            self.audio_interface = audio_interface
             
             # Start the conversation
             self.conversation = Conversation(
@@ -138,12 +143,44 @@ class ConversationalAgent:
             print("The agent will respond using your cloned voice.")
             print("💡 Press Ctrl+C to end the conversation.\n")
             
-            # Start the conversation session (blocking call)
+            # Start the conversation session (runs in background thread)
             try:
+                print("🔧 DEBUG: Calling conversation.start_session()...")
+                
+                # Wrap the original _run method to catch exceptions
+                original_run = self.conversation._run
+                def wrapped_run(*args, **kwargs):
+                    try:
+                        print("🔧 DEBUG: Conversation thread starting...")
+                        original_run(*args, **kwargs)
+                        print("🔧 DEBUG: Conversation thread completed normally")
+                    except Exception as e:
+                        print(f"\n❌ Error in conversation thread: {str(e)}")
+                        import traceback
+                        traceback.print_exc()
+                        raise
+                
+                self.conversation._run = wrapped_run
+                
                 self.conversation.start_session()
+                print("🔧 DEBUG: start_session() returned, waiting for session to end...")
+                
+                # Wait for the conversation thread to complete
+                # The session runs in background, so we need to wait for it
+                if hasattr(self.conversation, '_thread') and self.conversation._thread:
+                    self.conversation._thread.join()
+                    print("🔧 DEBUG: Conversation thread ended")
+                else:
+                    print("⚠️  Warning: No conversation thread found")
+                    
             except KeyboardInterrupt:
                 print("\n⚠️  Interrupting conversation...")
                 self.conversation.end_session()
+            except Exception as e:
+                print(f"\n❌ Error in start_session: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                raise
             
             print("\n" + "="*50)
             print("👋 Conversation ended")
@@ -160,19 +197,54 @@ class ConversationalAgent:
         Args:
             verbose: If True, print status messages. If False, stop silently.
         """
+        if verbose:
+            print("🔧 DEBUG: stop_conversation called")
+            print(f"🔧 DEBUG: conversation object exists: {self.conversation is not None}")
+        
         if self.conversation:
             try:
                 if verbose:
                     print("\n📞 Ending conversation session...")
+                    print("🔧 DEBUG: Interrupting audio playback")
+                
+                # Immediately interrupt any playing audio via the conversation's audio interface
+                try:
+                    if hasattr(self.conversation, 'audio_interface'):
+                        self.conversation.audio_interface.interrupt()
+                        if verbose:
+                            print("🔧 DEBUG: Audio interrupted via conversation")
+                except Exception as e:
+                    if verbose:
+                        print(f"⚠️  Could not interrupt via conversation: {str(e)}")
+                
+                # Also try interrupting via stored audio interface reference
+                if hasattr(self, 'audio_interface') and self.audio_interface:
+                    try:
+                        self.audio_interface.interrupt()
+                        if verbose:
+                            print("🔧 DEBUG: Audio interrupted via stored reference")
+                    except Exception as e:
+                        if verbose:
+                            print(f"⚠️  Could not interrupt stored audio: {str(e)}")
+                
+                if verbose:
+                    print("🔧 DEBUG: Calling end_session()")
                 self.conversation.end_session()
+                if verbose:
+                    print("🔧 DEBUG: end_session() returned")
                 self.conversation = None
                 if verbose:
                     print("🛑 Conversation stopped")
             except Exception as e:
                 if verbose:
                     print(f"⚠️  Error stopping conversation: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
                 # Force clear the conversation object
                 self.conversation = None
+        else:
+            if verbose:
+                print("⚠️  No active conversation to stop")
     
     def find_agent_by_name(self, agent_name):
         """
